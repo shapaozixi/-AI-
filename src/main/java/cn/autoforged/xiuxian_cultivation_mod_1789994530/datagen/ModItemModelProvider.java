@@ -2,6 +2,7 @@ package cn.autoforged.xiuxian_cultivation_mod_1789994530.datagen;
 
 import cn.autoforged.xiuxian_cultivation_mod_1789994530.XiuxianCultivationMod;
 import cn.autoforged.xiuxian_cultivation_mod_1789994530.item.ModItems;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.data.PackOutput;
 import net.minecraft.world.item.Item;
 import net.neoforged.neoforge.client.model.generators.ItemModelProvider;
@@ -27,7 +28,9 @@ public class ModItemModelProvider extends ItemModelProvider {
      * 三本秘籍的 JSON 内容完全一致，只换成各自的文件名，从而共用同一张图。
      */
     private void skillBookModel(Item item) {
-        withExistingParent(key(item).getPath(), mcLoc("item/generated"))
+        // 从注册表取物品的注册名（如 lock_on_manual），作为模型文件名
+        String name = BuiltInRegistries.ITEM.getKey(item).getPath();
+        withExistingParent(name, mcLoc("item/generated"))
                 .texture("layer0", modLoc("item/skill_book"));
     }
 }

@@ -19,7 +19,7 @@ import net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent;
 import net.neoforged.neoforge.network.handling.IPayloadContext;
 import net.neoforged.neoforge.network.registration.PayloadRegistrar;
 
-@EventBusSubscriber(modid = XiuxianCultivationMod.MODID)
+@EventBusSubscriber(modid = XiuxianCultivationMod.MODID, bus = EventBusSubscriber.Bus.MOD)
 public class ModPayloads {
     @SubscribeEvent
     public static void register(RegisterPayloadHandlersEvent event) {
