@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/generated",
+  "textures": {
+    "layer0": "xiuxian_cultivation_mod_1789994530:item/body_tempering_pill"
+  }
+}
