@@ -26,7 +26,10 @@ public record ClientboundLockTargetPayload(int targetEntityId) implements Custom
 
     public static final CustomPacketPayload.Type<ClientboundLockTargetPayload> TYPE =
             new CustomPacketPayload.Type<>(
-                    ResourceLocation.fromNamespaceAndPath(XiuxianCultivationMod.MODID, "lock_target"));
+                    // 注意：不能叫 lock_target —— 那个名字已被 ServerboundLockPayload 占用，
+                    // 同一 mod 内 payload 的 ResourceLocation 必须唯一，否则注册时抛
+                    // "already registered" 并把整个 mod 打成 broken 状态。
+                    ResourceLocation.fromNamespaceAndPath(XiuxianCultivationMod.MODID, "lock_target_sync"));
 
     public static final StreamCodec<ByteBuf, ClientboundLockTargetPayload> STREAM_CODEC =
             StreamCodec.composite(
