@@ -12,7 +12,7 @@ import org.lwjgl.glfw.GLFW;
 
 /** 客户端按键绑定：V 切换/调整真气强化，O 突破（开启淬体试炼），R 真气冲刺，
  * Z/X/C 释放功法技能，G 锁定生物，Shift+L 打开技能配置界面。 */
-@EventBusSubscriber(modid = XiuxianCultivationMod.MODID, value = Dist.CLIENT, bus = EventBusSubscriber.Bus.MOD)
+@EventBusSubscriber(modid = XiuxianCultivationMod.MODID, value = Dist.CLIENT)
 public class ModKeyMappings {
 
     public static final String KEY_CATEGORY = "key.categories." + XiuxianCultivationMod.MODID;
