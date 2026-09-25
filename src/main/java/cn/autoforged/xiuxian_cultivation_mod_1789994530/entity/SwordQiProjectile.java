@@ -1,5 +1,6 @@
 package cn.autoforged.xiuxian_cultivation_mod_1789994530.entity;
 
+import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.syncher.SynchedEntityData;
 import net.minecraft.world.entity.Entity;
@@ -30,6 +31,21 @@ public class SwordQiProjectile extends Projectile {
     private static final double SPEED = 0.5D;
     /** 命中判定额外的膨胀半径，让弧面更容易扫到生物。 */
     private static final double HIT_INFLATE = 0.9D;
+
+    // ===== 剑气外观：由原版粒子构成的「拱形」光弧 =====
+    /**
+     * 弧上采样段数。段数越多弧越连续，但粒子数线性增长（性能开关）。
+     * 参考图里那道弧横跨约 8-10 格，弧长变大后需要更多采样点才不会显得断断续续。
+     */
+    private static final int ARC_SEGMENTS = 24;
+    /** 弧的半径（格）。3.0 对应弧宽约 6 格，接近参考图的体量。 */
+    private static final double ARC_RADIUS = 3.0D;
+    /**
+     * 每隔多少 tick 撒一次粒子。
+     * 1 = 每 tick 都撒（最密最好看，但粒子数翻倍）；
+     * 2 = 隔 tick 撒（省一半开销，视觉上几乎看不出差别）。卡顿时优先调这个。
+     */
+    private static final int ARC_EMIT_INTERVAL = 2;
 
     private float damage = 1.0F;
     private double maxRange = 12.0D;
@@ -83,9 +99,57 @@ public class SwordQiProjectile extends Projectile {
             }
         }
 
+        // 外观：由原版粒子构成的拱形光弧。只在客户端生成（服务端撒粒子没有意义，还浪费带宽）。
+        if (this.level().isClientSide() && this.tickCount % ARC_EMIT_INTERVAL == 0) {
+            emitArcParticles();
+        }
+
         // 飞满射程即消散
         if (this.traveled >= this.maxRange) {
             this.discard();
+        }
+    }
+
+    /**
+     * 沿「拱形弧」铺一圈原版粒子，构成剑气外观（对应参考图：白色十字粒子勾弧 + 粉紫光晕）。
+     *
+     * <p>做法：用飞行方向算出三个正交基向量（前 / 右 / 上），再在「右-上」平面内
+     * 按 0~π 采样半圆 —— 中间最高、两端最低，即一道拱形弧。把每个采样点换算到世界坐标
+     * 后各撒两颗粒子：
+     * <ul>
+     *   <li>{@link ParticleTypes#FIREWORK} —— 白色十字闪光，负责勾出弧线轮廓；</li>
+     *   <li>{@link ParticleTypes#DRAGON_BREATH} —— 粉紫色雾气，负责柔和的发光底色。</li>
+     * </ul>
+     *
+     * <p>两者都是原版粒子，不引入任何额外依赖或贴图。
+     */
+    private void emitArcParticles() {
+        Vec3 forward = this.getDeltaMovement();
+        if (forward.lengthSqr() < 1.0E-6D) {
+            return;
+        }
+        forward = forward.normalize();
+
+        // 以世界上方向为参照构造正交基；正上/正下飞行时退化，换一个参照向量
+        Vec3 worldUp = new Vec3(0.0D, 1.0D, 0.0D);
+        Vec3 right = forward.cross(worldUp);
+        if (right.lengthSqr() < 1.0E-6D) {
+            right = new Vec3(1.0D, 0.0D, 0.0D);
+        } else {
+            right = right.normalize();
+        }
+        Vec3 up = right.cross(forward).normalize();
+
+        Vec3 base = this.position();
+        for (int i = 0; i <= ARC_SEGMENTS; i++) {
+            double t = (double) i / ARC_SEGMENTS;
+            double angle = Math.PI * t;                        // 0 → π
+            double offsetRight = -Math.cos(angle) * ARC_RADIUS; // 左端 → 右端
+            double offsetUp = Math.sin(angle) * ARC_RADIUS;     // 中间最高，两端贴地
+            Vec3 p = base.add(right.scale(offsetRight)).add(up.scale(offsetUp));
+
+            this.level().addParticle(ParticleTypes.FIREWORK, p.x, p.y, p.z, 0.0D, 0.0D, 0.0D);
+            this.level().addParticle(ParticleTypes.DRAGON_BREATH, p.x, p.y, p.z, 0.0D, 0.0D, 0.0D);
         }
     }
 

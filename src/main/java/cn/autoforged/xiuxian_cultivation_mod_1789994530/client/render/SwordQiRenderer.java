@@ -2,47 +2,34 @@ package cn.autoforged.xiuxian_cultivation_mod_1789994530.client.render;
 
 import cn.autoforged.xiuxian_cultivation_mod_1789994530.entity.SwordQiProjectile;
 import com.mojang.blaze3d.vertex.PoseStack;
-import com.mojang.blaze3d.vertex.VertexConsumer;
 import net.minecraft.client.renderer.MultiBufferSource;
-import net.minecraft.client.renderer.RenderType;
 import net.minecraft.client.renderer.entity.EntityRenderer;
 import net.minecraft.client.renderer.entity.EntityRendererProvider;
 import net.minecraft.resources.ResourceLocation;
-import org.joml.Matrix4f;
 
 /**
- * [武器强化] 剑气渲染器：用程序化几何画出一道<b>半圆弧形的蓝色光弧</b>。
+ * [武器强化] 剑气渲染器。
  *
- * <p>不使用任何贴图 —— 顶点写入 POSITION_COLOR 格式的 {@link RenderType#lightning()}，
- * 自带发光混合，所以弧面看上去像发光的剑气。
+ * <p><b>当前方案：剑气外观完全由原版粒子构成</b>，见
+ * {@link SwordQiProjectile#tick()} 里每 tick 调用的 {@code emitArcParticles()} —— 它沿一道拱形弧
+ * 铺 {@code ParticleTypes.FIREWORK}（白色十字）与 {@code ParticleTypes.DRAGON_BREATH}（粉紫光晕）。
  *
- * <p>坐标系说明：实体渲染时 PoseStack 已应用实体朝向（局部 Z+ 为前方），
- * 因此直接在 XY 平面画弧即可得到"横在飞行方向上"的月牙剑气。
+ * <p>因此这里<b>刻意不绘制任何几何体</b>，否则会在粒子之外再叠一层实心弧，出现双重影像。
+ * 本类的存在只为一个目的：把实体注册到渲染管线（实体没有渲染器不会被渲染，粒子仍会正常生成）。
+ *
+ * <p><b>如果将来粒子开销过大</b>（一次挥砍约产生 12 段 × 2 颗 × 飞行 tick 数），
+ * 可以把粒子关掉，改为在本类的 {@code render} 里用几何顶点或实例化渲染重建同一个拱形弧——
+ * 参考 Photon（Unity 风格粒子/拖尾 + GPU instancing）的思路：
+ * 一次性 GPU 批量绘制比逐个粒子实体便宜得多。
  */
 public class SwordQiRenderer extends EntityRenderer<SwordQiProjectile> {
 
-    /** 半圆分成多少段（段数越多越圆滑）。 */
-    private static final int SEGMENTS = 24;
-    /** 弧的内半径（格）。 */
-    private static final float INNER_RADIUS = 0.55F;
-    /** 弧的外半径（格）。 */
-    private static final float OUTER_RADIUS = 1.15F;
-    /** 外缘额外描一圈更淡的光晕，做出边缘渐隐感。 */
-    private static final float HALO_SCALE = 1.22F;
-
     /**
-     * 实体渲染器必须返回一个有效贴图。本渲染器纯用几何顶点（POSITION_COLOR），
-     * 不采样贴图，但返回 {@code null} 会踩到渲染管线的空指针，故给一个必定存在的原版贴图占位。
+     * 实体渲染器必须返回一个有效贴图。本渲染器不绘制任何东西、也不采样贴图，
+     * 但返回 {@code null} 会踩到渲染管线的空指针，故给一个必定存在的原版贴图占位。
      */
     private static final ResourceLocation PLACEHOLDER_TEXTURE =
             ResourceLocation.withDefaultNamespace("textures/particle/particles.png");
-
-    private static final int CORE_R = 130;
-    private static final int CORE_G = 205;
-    private static final int CORE_B = 255;
-    private static final int HALO_R = 60;
-    private static final int HALO_G = 140;
-    private static final int HALO_B = 255;
 
     public SwordQiRenderer(EntityRendererProvider.Context context) {
         super(context);
@@ -50,56 +37,12 @@ public class SwordQiRenderer extends EntityRenderer<SwordQiProjectile> {
 
     @Override
     public ResourceLocation getTextureLocation(SwordQiProjectile entity) {
-        // 纯几何渲染，不采样贴图；仅返回占位以避免 null 贴图。
         return PLACEHOLDER_TEXTURE;
     }
 
     @Override
     public void render(SwordQiProjectile entity, float entityYaw, float partialTick, PoseStack poseStack,
                        MultiBufferSource bufferSource, int packedLight) {
-        poseStack.pushPose();
-
-        VertexConsumer consumer = bufferSource.getBuffer(RenderType.lightning());
-        Matrix4f matrix = poseStack.last().pose();
-
-        // 外圈淡光晕
-        for (int i = 0; i < SEGMENTS; i++) {
-            float a0 = angleAt(i);
-            float a1 = angleAt(i + 1);
-            emitQuad(consumer, matrix, a0, a1,
-                    INNER_RADIUS * HALO_SCALE, OUTER_RADIUS * HALO_SCALE,
-                    HALO_R, HALO_G, HALO_B, 90);
-        }
-        // 内圈实心弧（剑气本体）
-        for (int i = 0; i < SEGMENTS; i++) {
-            float a0 = angleAt(i);
-            float a1 = angleAt(i + 1);
-            emitQuad(consumer, matrix, a0, a1,
-                    INNER_RADIUS, OUTER_RADIUS,
-                    CORE_R, CORE_G, CORE_B, 215);
-        }
-
-        poseStack.popPose();
-    }
-
-    /** 第 i 段对应的角度（从 -90° 扫到 +90°，即右半圆）。 */
-    private static float angleAt(int i) {
-        return (float) Math.toRadians(-90.0 + 180.0 * i / SEGMENTS);
-    }
-
-    /** 把一段弧做成一个梯形四边形（内弧两点 + 外弧两点）。 */
-    private static void emitQuad(VertexConsumer consumer, Matrix4f matrix,
-                                 float a0, float a1,
-                                 float innerRadius, float outerRadius,
-                                 int r, int g, int b, int a) {
-        float c0 = (float) Math.cos(a0);
-        float s0 = (float) Math.sin(a0);
-        float c1 = (float) Math.cos(a1);
-        float s1 = (float) Math.sin(a1);
-
-        consumer.addVertex(matrix, c0 * innerRadius, s0 * innerRadius, 0.0F).setColor(r, g, b, a);
-        consumer.addVertex(matrix, c0 * outerRadius, s0 * outerRadius, 0.0F).setColor(r, g, b, a);
-        consumer.addVertex(matrix, c1 * outerRadius, s1 * outerRadius, 0.0F).setColor(r, g, b, a);
-        consumer.addVertex(matrix, c1 * innerRadius, s1 * innerRadius, 0.0F).setColor(r, g, b, a);
+        // 外观由粒子承担，这里不绘制几何体（原因见类注释）。
     }
 }
