@@ -32,18 +32,21 @@ public class SwordQiProjectile extends Projectile {
     /** 命中判定额外的膨胀半径，让弧面更容易扫到生物。 */
     private static final double HIT_INFLATE = 0.9D;
 
-    // ===== 剑气外观：由原版粒子构成的「拱形」光弧 =====
+    // ===== 剑气外观：由原版粒子构成的「弯月 / 弧刃」 =====
+    /** 沿弧采样的段数：决定月牙有多连续，粒子数与之成正比（性能开关）。 */
+    private static final int ARC_SEGMENTS = 16;
+    /** 外弧半径（格）。月牙的横向跨度约为 2×ARC_RADIUS。 */
+    private static final double ARC_RADIUS = 2.6D;
     /**
-     * 弧上采样段数。段数越多弧越连续，但粒子数线性增长（性能开关）。
-     * 参考图里那道弧横跨约 8-10 格，弧长变大后需要更多采样点才不会显得断断续续。
+     * 月牙最厚处的厚度（格）。厚度沿弧线按 sin 分布 —— 中间最厚、两端收成刀尖，
+     * 这样才是「横扫的弧刃」而不是一条均匀的带子。
      */
-    private static final int ARC_SEGMENTS = 24;
-    /** 弧的半径（格）。3.0 对应弧宽约 6 格，接近参考图的体量。 */
-    private static final double ARC_RADIUS = 3.0D;
+    private static final double ARC_THICKNESS = 0.85D;
+    /** 每一段沿厚度方向填几颗粒子（外层白边 + 内层粉紫填充）。 */
+    private static final int ARC_FILL_PER_SEGMENT = 3;
     /**
-     * 每隔多少 tick 撒一次粒子。
-     * 1 = 每 tick 都撒（最密最好看，但粒子数翻倍）；
-     * 2 = 隔 tick 撒（省一半开销，视觉上几乎看不出差别）。卡顿时优先调这个。
+     * 每隔多少 tick 撒一次粒子。1 = 每 tick 都撒（最密）；
+     * 卡顿时优先把这个值调大，粒子开销线性下降。
      */
     private static final int ARC_EMIT_INTERVAL = 2;
 
@@ -143,13 +146,27 @@ public class SwordQiProjectile extends Projectile {
         Vec3 base = this.position();
         for (int i = 0; i <= ARC_SEGMENTS; i++) {
             double t = (double) i / ARC_SEGMENTS;
-            double angle = Math.PI * t;                        // 0 → π
-            double offsetRight = -Math.cos(angle) * ARC_RADIUS; // 左端 → 右端
-            double offsetUp = Math.sin(angle) * ARC_RADIUS;     // 中间最高，两端贴地
-            Vec3 p = base.add(right.scale(offsetRight)).add(up.scale(offsetUp));
+            double angle = Math.PI * t;                             // 0 → π
+            // 沿弧的厚度分布：中间最厚、两端收成刀尖 —— 这才是「弧刃」的轮廓
+            double thickness = ARC_THICKNESS * Math.sin(Math.PI * t);
+            if (thickness < 1.0E-4D) {
+                continue;                                            // 刀尖处自然收束
+            }
 
-            this.level().addParticle(ParticleTypes.FIREWORK, p.x, p.y, p.z, 0.0D, 0.0D, 0.0D);
-            this.level().addParticle(ParticleTypes.DRAGON_BREATH, p.x, p.y, p.z, 0.0D, 0.0D, 0.0D);
+            for (int k = 0; k < ARC_FILL_PER_SEGMENT; k++) {
+                // 在「外缘 → 内缘」之间横向铺满，形成有厚度的实体月牙
+                double fill = (k + 0.5D) / ARC_FILL_PER_SEGMENT;
+                double radius = ARC_RADIUS - thickness * fill;
+                double offsetRight = -Math.cos(angle) * radius;
+                double offsetUp = Math.sin(angle) * radius;
+                Vec3 p = base.add(right.scale(offsetRight)).add(up.scale(offsetUp));
+
+                // 靠外缘的一层用白色十字勾出锋利的刃口，内层用粉紫填充出光晕
+                boolean edge = fill < 0.34D;
+                this.level().addParticle(
+                        edge ? ParticleTypes.FIREWORK : ParticleTypes.DRAGON_BREATH,
+                        p.x, p.y, p.z, 0.0D, 0.0D, 0.0D);
+            }
         }
     }
 

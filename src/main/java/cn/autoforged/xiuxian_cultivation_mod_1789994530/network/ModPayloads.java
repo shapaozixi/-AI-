@@ -10,8 +10,6 @@ import cn.autoforged.xiuxian_cultivation_mod_1789994530.network.payload.Serverbo
 import cn.autoforged.xiuxian_cultivation_mod_1789994530.network.payload.ServerboundLockPayload;
 import cn.autoforged.xiuxian_cultivation_mod_1789994530.network.payload.ServerboundSkillAssignPayload;
 import cn.autoforged.xiuxian_cultivation_mod_1789994530.network.payload.ServerboundSkillUsePayload;
-import cn.autoforged.xiuxian_cultivation_mod_1789994530.client.ClientLockOnState;
-import cn.autoforged.xiuxian_cultivation_mod_1789994530.network.payload.ClientboundLockTargetPayload;
 import cn.autoforged.xiuxian_cultivation_mod_1789994530.network.payload.ServerboundSwordQiPayload;
 import cn.autoforged.xiuxian_cultivation_mod_1789994530.network.payload.ServerboundToggleQiEnhancePayload;
 import net.minecraft.server.level.ServerPlayer;
@@ -34,11 +32,6 @@ public class ModPayloads {
                 ClientboundQiEnhanceSyncPayload.TYPE,
                 ClientboundQiEnhanceSyncPayload.STREAM_CODEC,
                 ModPayloads::handleEnhanceSync);
-        // 锁定目标：锁定时/解锁时各发一次，客户端据此做平滑视角跟随
-        registrar.playToClient(
-                ClientboundLockTargetPayload.TYPE,
-                ClientboundLockTargetPayload.STREAM_CODEC,
-                ModPayloads::handleLockTarget);
         registrar.playToServer(
                 ServerboundToggleQiEnhancePayload.TYPE,
                 ServerboundToggleQiEnhancePayload.STREAM_CODEC,
@@ -128,17 +121,6 @@ public class ModPayloads {
         if (context.player() instanceof ServerPlayer serverPlayer) {
             CultivationHelper.tryLockTarget(serverPlayer);
         }
-    }
-
-    /** 服务端 -> 客户端：同步锁定目标（-1 表示解除），客户端据此做平滑视角跟随。 */
-    private static void handleLockTarget(ClientboundLockTargetPayload payload, IPayloadContext context) {
-        context.enqueueWork(() -> {
-            if (payload.targetEntityId() == ClientboundLockTargetPayload.NO_TARGET) {
-                ClientLockOnState.clear();
-            } else {
-                ClientLockOnState.setTarget(payload.targetEntityId());
-            }
-        });
     }
 
     /** 左键空挥 → 释放剑气，方向采用客户端发来的真实朝向（避免服务端朝向滞后）。 */
