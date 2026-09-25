@@ -873,19 +873,21 @@ public final class CultivationHelper {
         }
         look = look.normalize();
         Vec3 end = eye.add(look.scale(maxDistance));
-        Entity best = null;
+        // 用 LivingEntity 而非 Entity：后续 notifyLockTarget 需要具体类型，
+        // 循环里已经过滤掉非生物，直接让编译器知道这一点可省掉一次强转。
+        LivingEntity best = null;
         double bestDistance = Double.MAX_VALUE;
         AABB search = new AABB(eye, end).inflate(1.5D);
         for (Entity candidate : player.level().getEntities(player, search)) {
-            if (candidate == player || !(candidate instanceof LivingEntity)) {
+            if (candidate == player || !(candidate instanceof LivingEntity living)) {
                 continue;
             }
-            Optional<Vec3> hit = candidate.getBoundingBox().inflate(0.5D).clip(eye, end);
+            Optional<Vec3> hit = living.getBoundingBox().inflate(0.5D).clip(eye, end);
             if (hit.isPresent()) {
                 double d = eye.distanceToSqr(hit.get());
                 if (d < bestDistance) {
                     bestDistance = d;
-                    best = candidate;
+                    best = living;
                 }
             }
         }
