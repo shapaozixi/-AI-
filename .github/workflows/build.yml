@@ -21,8 +21,34 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
 
+      # 把完整输出同时写进日志文件，便于失败时集中提取错误
       - name: Build with Gradle
-        run: ./gradlew build
+        run: |
+          set -o pipefail
+          ./gradlew build 2>&1 | tee /tmp/build.log
+
+      # 失败时：集中打印编译错误 + 注解真实签名，避免在海量日志里翻找
+      - name: Dump compile errors and annotation signature
+        if: failure()
+        run: |
+          echo "================ 编译错误汇总 ================"
+          grep -n -B1 -A6 "error:" /tmp/build.log | head -100 || true
+          echo ""
+          echo "================ EventBusSubscriber 真实签名 ================"
+          found=0
+          for J in $(find ~/.gradle/caches -name "*.jar" 2>/dev/null); do
+            if unzip -l "$J" 2>/dev/null | grep -q "net/neoforged/fml/common/EventBusSubscriber.class"; then
+              echo "找到 JAR: $J"
+              javap -cp "$J" net.neoforged.fml.common.EventBusSubscriber || true
+              javap -cp "$J" 'net.neoforged.fml.common.EventBusSubscriber$Bus' 2>/dev/null || true
+              found=1
+              break
+            fi
+          done
+          if [ "$found" = "0" ]; then
+            echo "（未在 gradle 缓存中找到 fmlcore，尝试从 neoforge jar 中查找）"
+            find ~/.gradle/caches -name "neoforge-*.jar" 2>/dev/null | head -5
+          fi
 
       # 编译成功后上传 jar，方便直接下载成品
       - name: Upload mod jar
