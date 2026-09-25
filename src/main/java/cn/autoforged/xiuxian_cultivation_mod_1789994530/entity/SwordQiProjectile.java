@@ -135,13 +135,20 @@ public class SwordQiProjectile extends Projectile {
 
         // 以世界上方向为参照构造正交基；正上/正下飞行时退化，换一个参照向量
         Vec3 worldUp = new Vec3(0.0D, 1.0D, 0.0D);
+        // 水平右向量：由飞行方向与世界上方向叉乘得到
         Vec3 right = forward.cross(worldUp);
         if (right.lengthSqr() < 1.0E-6D) {
+            // 垂直向上/下飞行时叉乘退化，随便给一个水平方向
             right = new Vec3(1.0D, 0.0D, 0.0D);
         } else {
             right = right.normalize();
         }
-        Vec3 up = right.cross(forward).normalize();
+        // 水平前向量：把飞行方向压进水平面 —— 「贴地平扫」的弧就在这个平面内展开，
+        // 所以从玩家视角看是一道横劈的月牙，而不是一堵竖着的弧墙。
+        Vec3 flatForward = worldUp.cross(right).normalize();
+        if (flatForward.dot(forward) < 0.0D) {
+            flatForward = flatForward.scale(-1.0D);   // 保证凸面朝前
+        }
 
         Vec3 base = this.position();
         for (int i = 0; i <= ARC_SEGMENTS; i++) {
@@ -157,9 +164,12 @@ public class SwordQiProjectile extends Projectile {
                 // 在「外缘 → 内缘」之间横向铺满，形成有厚度的实体月牙
                 double fill = (k + 0.5D) / ARC_FILL_PER_SEGMENT;
                 double radius = ARC_RADIUS - thickness * fill;
+                // 弧在水平面内展开：横向用 right，前凸方向用 flatForward
                 double offsetRight = -Math.cos(angle) * radius;
-                double offsetUp = Math.sin(angle) * radius;
-                Vec3 p = base.add(right.scale(offsetRight)).add(up.scale(offsetUp));
+                double offsetForward = Math.sin(angle) * radius;
+                Vec3 p = base
+                        .add(right.scale(offsetRight))
+                        .add(flatForward.scale(offsetForward));
 
                 // 靠外缘的一层用白色十字勾出锋利的刃口，内层用粉紫填充出光晕
                 boolean edge = fill < 0.34D;
