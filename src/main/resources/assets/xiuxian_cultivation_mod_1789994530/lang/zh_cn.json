@@ -52,8 +52,9 @@
   "xiuxian_cultivation_mod_1789994530.message.qi_buff_exhausted": "真气耗尽，[真气强化]已中断。",
   "xiuxian_cultivation_mod_1789994530.message.weapon_buff_on": "已附加[武器强化]：真气回复提升，手持武器攻击可挥出剑气。",
   "xiuxian_cultivation_mod_1789994530.message.weapon_buff_off": "已关闭[武器强化]。",
-  "xiuxian_cultivation_mod_1789994530.message.lock_on": "已锁定 %s，冲刺将瞬移至其面前。",
+  "xiuxian_cultivation_mod_1789994530.message.lock_on": "已锁定 %s，视角将自动跟随；再按一次解除锁定。",
   "xiuxian_cultivation_mod_1789994530.message.lock_none": "视线内没有可锁定的生物。",
+  "xiuxian_cultivation_mod_1789994530.message.lock_off": "已解除锁定。",
   "config.xiuxian_cultivation_mod_1789994530.lock_max_distance": "锁定最大距离（格）",
   "config.xiuxian_cultivation_mod_1789994530.entity_qi_bar": "显示生物真气数值条"
 }

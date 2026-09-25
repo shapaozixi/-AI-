@@ -7,6 +7,7 @@ import cn.autoforged.xiuxian_cultivation_mod_1789994530.config.ModCommonConfig;
 import cn.autoforged.xiuxian_cultivation_mod_1789994530.effect.ModEffects;
 import cn.autoforged.xiuxian_cultivation_mod_1789994530.entity.SwordQiProjectile;
 import cn.autoforged.xiuxian_cultivation_mod_1789994530.network.payload.ClientboundCultivationSyncPayload;
+import cn.autoforged.xiuxian_cultivation_mod_1789994530.network.payload.ClientboundLockTargetPayload;
 import cn.autoforged.xiuxian_cultivation_mod_1789994530.network.payload.ClientboundQiEnhanceSyncPayload;
 import cn.autoforged.xiuxian_cultivation_mod_1789994530.skill.SkillType;
 import net.minecraft.core.BlockPos;
@@ -517,13 +518,16 @@ public final class CultivationHelper {
         if (data.lockedTarget == null) {
             return;
         }
+        // 目标死亡 / 切换维度 / 被移除 → 自动解除锁定并告知客户端
         LivingEntity target = getLockedTarget(player);
         if (target == null) {
+            clearLock(player, data);
             return;
         }
-        faceEntity(player, target);
-        player.connection.send(new ClientboundPlayerLookAtPacket(
-                EntityAnchorArgument.Anchor.EYES, target, EntityAnchorArgument.Anchor.EYES));
+        // 注意：这里【不再】每 tick 强制转向。
+        // 旧实现每 tick 发 ClientboundPlayerLookAtPacket + faceEntity，会与玩家自己的
+        // 鼠标输入逐 tick 争夺控制权，表现为「视角剧烈抖动」。
+        // 现在只把「锁了谁」同步给客户端一次，由 ClientLockOnHandler 做平滑插值跟随。
     }
 
     private static void handleWalkExp(Player player, CultivationData data) {
@@ -856,6 +860,11 @@ public final class CultivationHelper {
                     SkillType.LOCK_ON.displayName()), true);
             return;
         }
+        // 已经锁定 → 这一次按键表示「解除锁定」（切换语义，符合直觉）
+        if (data.lockedTarget != null) {
+            clearLock(player, data);
+            return;
+        }
         double maxDistance = ModCommonConfig.CONFIG.lockMaxDistance.get();
         Vec3 eye = player.getEyePosition();
         Vec3 look = player.getLookAngle();
@@ -886,14 +895,38 @@ public final class CultivationHelper {
             player.displayClientMessage(Component.translatable(key("message.lock_on"), best.getDisplayName()), true);
             player.level().playSound(null, player.getX(), player.getY(), player.getZ(),
                     SoundEvents.ENDERMAN_TELEPORT, SoundSource.PLAYERS, 0.8F, 1.6F);
+            notifyLockTarget(player, best);      // 告知客户端开始平滑跟随
         } else {
             data.lockedTarget = null;
             data.lockedTargetDimension = "";
             player.displayClientMessage(Component.translatable(key("message.lock_none")), true);
             player.level().playSound(null, player.getX(), player.getY(), player.getZ(),
                     SoundEvents.BEACON_DEACTIVATE, SoundSource.PLAYERS, 0.6F, 1.8F);
+            notifyLockTarget(player, null);      // 确保客户端停止跟随
         }
         sync(player);
+    }
+
+    /**
+     * 解除当前锁定：播提示音与提示消息，并通知客户端停止视角跟随。
+     */
+    private static void clearLock(ServerPlayer player, CultivationData data) {
+        data.lockedTarget = null;
+        data.lockedTargetDimension = "";
+        player.displayClientMessage(Component.translatable(key("message.lock_off")), true);
+        player.level().playSound(null, player.getX(), player.getY(), player.getZ(),
+                SoundEvents.BEACON_DEACTIVATE, SoundSource.PLAYERS, 0.6F, 1.4F);
+        notifyLockTarget(player, null);
+        sync(player);
+    }
+
+    /**
+     * 把「当前锁定目标」同步给客户端；{@code target} 为 {@code null} 表示解除锁定。
+     * 客户端收到后由 ClientLockOnHandler 做平滑视角跟随，避免服务端逐 tick 强制转向造成的抖动。
+     */
+    private static void notifyLockTarget(ServerPlayer player, LivingEntity target) {
+        int id = (target == null) ? ClientboundLockTargetPayload.NO_TARGET : target.getId();
+        PacketDistributor.sendToPlayer(player, new ClientboundLockTargetPayload(id));
     }
 
     /** 取当前锁定的生物；目标已死或不在同一维度则自动解除并返回 null。 */
@@ -916,13 +949,29 @@ public final class CultivationHelper {
     }
 
     /**
-     * [武器强化] 剑气：向前挥出一道<b>剑气弹射物</b>（半圆弧蓝色，渲染见 SwordQiRenderer）。
+     * [武器强化] 释放剑气，方向取服务端玩家的朝向。
+     * 用于「命中实体」的路径 —— 那时服务端朝向是本次攻击的权威值。
      *
-     * <p>弹射物穿透沿途生物造成伤害、不被方块阻挡，飞满 {@link #SWORD_QI_RANGE} 格后消散。
-     * 触发方式改为「左键即可」：空挥由客户端发包触发，命中实体走 AttackEntityEvent，
+     * <p>剑气是穿透型弹射物（半圆弧蓝色，渲染见 SwordQiRenderer）：沿途生物各受一次伤害、
+     * 不被方块阻挡，飞满 {@link #SWORD_QI_RANGE} 格后消散。
+     * 触发方式为「左键即可」：空挥由客户端发包触发，命中实体走 AttackEntityEvent，
      * 两条路径互斥、不会重复发射。
      */
     public static void fireSwordQi(ServerPlayer player) {
+        fireSwordQi(player, player.getYRot(), player.getXRot());
+    }
+
+    /**
+     * [武器强化] 释放剑气，方向由调用方给定。
+     *
+     * <p>「空挥」路径传入的是客户端发射瞬间的真实 yaw/pitch：客户端静止只转视角时，
+     * 朝向并非每 tick 都同步到服务端，若这里直接读服务端朝向会拿到滞后值，
+     * 表现就是「剑气方向随机」。
+     *
+     * @param yaw   水平朝向（度）
+     * @param pitch 俯仰角（度）
+     */
+    public static void fireSwordQi(ServerPlayer player, float yaw, float pitch) {
         if (!isWeaponEnhanceActive(player)) {
             return;
         }
@@ -930,7 +979,7 @@ public final class CultivationHelper {
         if (!(stack.getItem() instanceof SwordItem) && !(stack.getItem() instanceof AxeItem)) {
             return;
         }
-        Vec3 dir = player.getLookAngle();
+        Vec3 dir = Vec3.directionFromRotation(pitch, yaw);
         if (dir.lengthSqr() < 1.0E-6D) {
             return;
         }

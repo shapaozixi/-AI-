@@ -65,6 +65,12 @@ public class ModClientInput {
      */
     @SubscribeEvent
     public static void onLeftClickEmpty(PlayerInteractEvent.LeftClickEmpty event) {
-        PacketDistributor.sendToServer(ServerboundSwordQiPayload.INSTANCE);
+        // 连同发射瞬间的真实朝向一起发送：服务端持有的玩家朝向可能滞后于客户端视角，
+        // 直接让服务端读 getLookAngle() 会让剑气方向看起来是随机的。
+        var player = Minecraft.getInstance().player;
+        if (player != null) {
+            PacketDistributor.sendToServer(
+                    new ServerboundSwordQiPayload(player.getYRot(), player.getXRot()));
+        }
     }
 }

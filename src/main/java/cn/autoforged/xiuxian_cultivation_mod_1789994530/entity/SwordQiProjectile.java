@@ -26,8 +26,8 @@ import java.util.UUID;
  */
 public class SwordQiProjectile extends Projectile {
 
-    /** 每 tick 飞行速度（格/tick）。 */
-    private static final double SPEED = 0.85D;
+    /** 每 tick 飞行速度（格/tick）。原为 0.85，快到只剩残影，放慢到 0.5 便于看清。 */
+    private static final double SPEED = 0.5D;
     /** 命中判定额外的膨胀半径，让弧面更容易扫到生物。 */
     private static final double HIT_INFLATE = 0.9D;
 

@@ -52,8 +52,9 @@
   "xiuxian_cultivation_mod_1789994530.message.qi_buff_exhausted": "Out of Qi, Qi Enhancement ended.",
   "xiuxian_cultivation_mod_1789994530.message.weapon_buff_on": "Weapon Enhancement ON: qi regen boosted, weapon attacks release sword qi.",
   "xiuxian_cultivation_mod_1789994530.message.weapon_buff_off": "Weapon Enhancement OFF.",
-  "xiuxian_cultivation_mod_1789994530.message.lock_on": "Locked onto %s, dash will teleport you in front of it.",
+  "xiuxian_cultivation_mod_1789994530.message.lock_on": "Locked onto %s - your view will follow it. Press again to release.",
   "xiuxian_cultivation_mod_1789994530.message.lock_none": "No creature in sight to lock onto.",
+  "xiuxian_cultivation_mod_1789994530.message.lock_off": "Lock-On released.",
   "config.xiuxian_cultivation_mod_1789994530.lock_max_distance": "Lock-On max distance (blocks)",
   "config.xiuxian_cultivation_mod_1789994530.entity_qi_bar": "Show entity qi value bar"
 }

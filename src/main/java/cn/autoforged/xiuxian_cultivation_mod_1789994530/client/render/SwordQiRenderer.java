@@ -22,13 +22,20 @@ import org.joml.Matrix4f;
 public class SwordQiRenderer extends EntityRenderer<SwordQiProjectile> {
 
     /** 半圆分成多少段（段数越多越圆滑）。 */
-    private static final int SEGMENTS = 20;
+    private static final int SEGMENTS = 24;
     /** 弧的内半径（格）。 */
-    private static final float INNER_RADIUS = 0.42F;
+    private static final float INNER_RADIUS = 0.55F;
     /** 弧的外半径（格）。 */
-    private static final float OUTER_RADIUS = 0.86F;
+    private static final float OUTER_RADIUS = 1.15F;
     /** 外缘额外描一圈更淡的光晕，做出边缘渐隐感。 */
-    private static final float HALO_SCALE = 1.18F;
+    private static final float HALO_SCALE = 1.22F;
+
+    /**
+     * 实体渲染器必须返回一个有效贴图。本渲染器纯用几何顶点（POSITION_COLOR），
+     * 不采样贴图，但返回 {@code null} 会踩到渲染管线的空指针，故给一个必定存在的原版贴图占位。
+     */
+    private static final ResourceLocation PLACEHOLDER_TEXTURE =
+            ResourceLocation.withDefaultNamespace("textures/particle/particles.png");
 
     private static final int CORE_R = 130;
     private static final int CORE_G = 205;
@@ -43,8 +50,8 @@ public class SwordQiRenderer extends EntityRenderer<SwordQiProjectile> {
 
     @Override
     public ResourceLocation getTextureLocation(SwordQiProjectile entity) {
-        // 纯几何渲染，没有贴图
-        return null;
+        // 纯几何渲染，不采样贴图；仅返回占位以避免 null 贴图。
+        return PLACEHOLDER_TEXTURE;
     }
 
     @Override
