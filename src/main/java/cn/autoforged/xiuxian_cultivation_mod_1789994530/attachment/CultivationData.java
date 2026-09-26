@@ -48,6 +48,8 @@ public class CultivationData implements INBTSerializable<CompoundTag> {
     public int syncTimer = 0;
     /** 上次冲刺的游戏刻（不持久化） */
     public long lastDashTick = -1000L;
+    /** 上次挥出剑气的游戏刻（不持久化），用于出手冷却、避免连点叠出多道剑气 */
+    public long lastSwordQiTick = -1000L;
     /** 连续冲刺的次数（不持久化），用于递增真气消耗 */
     public int dashStreak = 0;
     /** 已习得功法技能的位掩码 */

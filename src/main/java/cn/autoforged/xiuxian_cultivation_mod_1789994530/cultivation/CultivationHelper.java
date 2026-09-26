@@ -114,24 +114,37 @@ public final class CultivationHelper {
     public static final double WEAPON_ENHANCE_REGEN_ATTACK_MULTIPLIER = 5.0D;
     /** [武器强化] 技能 buff 持续时长（tick），30 秒 */
     public static final int WEAPON_ENHANCE_DURATION_TICKS = 600;
-    /** [武器强化] 剑气射程（格） */
-    public static final double SWORD_QI_RANGE = 12.0D;
-    /** [武器强化] 每次挥出剑气额外消耗的真气 */
-    public static final double SWORD_QI_QI_COST = 15.0D;
     /** 冲刺特效最短间隔（tick），限制短时间内频繁触发粒子造成卡顿 */
     public static final int DASH_FX_INTERVAL_TICKS = 10;
+    /** [武器强化] 剑气射程（格） */
+    public static final double SWORD_QI_RANGE = 14.0D;
+    /**
+     * [武器强化] 每次挥出剑气的基础真气消耗。
+     * 这个值同时决定月牙的大小 —— 消耗越多，月牙越大、破坏越强。
+     */
+    public static final double SWORD_QI_QI_COST = 40.0D;
+    /**
+     * [武器强化] 剑气出手冷却（tick）。
+     * 左键连点原本会叠出一堆剑气，这个冷却把出手间隔限制住。
+     */
+    public static final int SWORD_QI_COOLDOWN_TICKS = 7;
     /** 破坏地形：最低需要消耗的真气，低于此值不破坏 */
     public static final double TERRAIN_MIN_QI = 5.0D;
     /** 破坏地形：基准半径 */
     public static final int TERRAIN_BASE_RADIUS = 1;
     /** 破坏地形：每多消耗多少真气半径 +1 */
-    public static final double TERRAIN_QI_PER_RADIUS = 60.0D;
+    public static final double TERRAIN_QI_PER_RADIUS = 45.0D;
     /** 破坏地形：最大半径 */
-    public static final int TERRAIN_MAX_RADIUS = 4;
+    public static final int TERRAIN_MAX_RADIUS = 6;
     /** 破坏地形：单次最多破坏的方块数，避免卡顿 */
-    public static final int TERRAIN_MAX_BLOCKS = 48;
+    public static final int TERRAIN_MAX_BLOCKS = 96;
     /** 破坏地形：硬度超过该值的方块（黑曜石等）不破坏 */
     public static final float TERRAIN_MAX_HARDNESS = 50.0F;
+    /**
+     * [真气强化] 模式下，攻击造成的破坏额外放大倍率。
+     * 让「开着真气强化打人」比「普通打人」明显更能犁地。
+     */
+    public static final double QI_ENHANCE_TERRAIN_MULTIPLIER = 1.8D;
 
     private CultivationHelper() {
     }
@@ -985,6 +998,12 @@ public final class CultivationHelper {
             return;
         }
 
+        // 出手冷却：左键连点原本会叠出一堆剑气糊在一起，这里限流
+        long now = player.level().getGameTime();
+        if (now - data.lastSwordQiTick < SWORD_QI_COOLDOWN_TICKS) {
+            return;
+        }
+
         // 已锁定目标时：剑气自动朝目标飞（而不是跟着准星），保证「攻击不会丢」；
         // 同时把视角转向目标，让玩家看清剑气飞向哪里。
         LivingEntity locked = getLockedTarget(player);
@@ -1003,16 +1022,20 @@ public final class CultivationHelper {
             }
         }
 
-        data.qi -= SWORD_QI_QI_COST;
+        // [真气强化] 特性：消耗真气附加伤害与破坏力（近战命中走 LivingIncomingDamageEvent 的同一套逻辑）
+        float baseDamage = (float) player.getAttributeValue(Attributes.ATTACK_DAMAGE);
+        QiEnhanceOutcome outcome = applyQiEnhancement(player, baseDamage);
+        float damage = outcome.damage();
+        // 本次剑气的真气总开销 = 固定开销 + 真气强化附加消耗。
+        // 它直接决定月牙的大小和沿途破坏力：花得越多，打得越大。
+        double totalQiSpent = SWORD_QI_QI_COST + outcome.consumedQi();
+
+        data.qi = Math.max(0.0D, data.qi - SWORD_QI_QI_COST);
+        data.lastSwordQiTick = now;
 
         if (player.level() instanceof ServerLevel serverLevel) {
-            float baseDamage = (float) player.getAttributeValue(Attributes.ATTACK_DAMAGE);
-            // [真气强化] 特性：消耗真气附加伤害。
-            // 近战命中走 LivingIncomingDamageEvent 里的同一套逻辑，剑气在这里显式调用，
-            // 让「剑气也能吃到真气模式的加成」。
-            QiEnhanceOutcome outcome = applyQiEnhancement(player, baseDamage);
-            float damage = outcome.damage();
-            SwordQiProjectile projectile = new SwordQiProjectile(serverLevel, player, dir, damage, SWORD_QI_RANGE);
+            SwordQiProjectile projectile = new SwordQiProjectile(serverLevel, player, dir, damage,
+                    SWORD_QI_RANGE, totalQiSpent);
             serverLevel.addFreshEntity(projectile);
             serverLevel.playSound(null, player.getX(), player.getY(), player.getZ(),
                     SoundEvents.PLAYER_ATTACK_SWEEP, SoundSource.PLAYERS, 1.0F, 1.2F);

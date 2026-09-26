@@ -1,11 +1,14 @@
 package cn.autoforged.xiuxian_cultivation_mod_1789994530.entity;
 
+import cn.autoforged.xiuxian_cultivation_mod_1789994530.cultivation.CultivationHelper;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.syncher.SynchedEntityData;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.entity.projectile.Projectile;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.AABB;
@@ -16,43 +19,59 @@ import java.util.Set;
 import java.util.UUID;
 
 /**
- * [武器强化] 剑气弹射物：一道半圆弧形的蓝色剑气（模型由 SwordQiRenderer 现画）。
+ * [武器强化] 剑气弹射物：一道贴地平扫的弯月形弧刃，外观完全由原版粒子构成。
  *
- * <p>按需求实现的行为：
+ * <p>行为：
  * <ul>
- *   <li><b>穿透实体</b>：沿途每个生物都被扫到并受到一次伤害，但剑气不停留、不消失；</li>
- *   <li><b>穿透方块</b>：不受方块阻挡，也不会因撞墙消失；</li>
- *   <li>飞满最大射程后自动消失。</li>
+ *   <li><b>穿透实体</b>：沿途每个生物各受一次伤害，剑气不停留；</li>
+ *   <li><b>穿透方块</b>：自身不受方块阻挡，但会<b>沿途破坏</b>可破坏的方块；</li>
+ *   <li><b>体积联动</b>：发射时消耗的真气越多，月牙越大、破坏力越强；</li>
+ *   <li>飞满最大射程后消散。</li>
  * </ul>
  */
 public class SwordQiProjectile extends Projectile {
 
-    /** 每 tick 飞行速度（格/tick）。原为 0.85，快到只剩残影，放慢到 0.5 便于看清。 */
-    private static final double SPEED = 0.5D;
-    /** 命中判定额外的膨胀半径，让弧面更容易扫到生物。 */
-    private static final double HIT_INFLATE = 0.9D;
+    /** 飞行速度（格/tick）。刻意偏快，突出「凌厉」的手感。 */
+    private static final double SPEED = 0.95D;
+    /** 命中判定额外的膨胀半径。 */
+    private static final double HIT_INFLATE = 1.0D;
 
-    // ===== 剑气外观：由原版粒子构成的「弯月 / 弧刃」 =====
-    /** 沿弧采样的段数：决定月牙有多连续，粒子数与之成正比（性能开关）。 */
+    // ===== 外观：原版粒子构成的「贴地平扫弯月」 =====
+    /** 沿弧采样段数。 */
     private static final int ARC_SEGMENTS = 16;
-    /** 外弧半径（格）。月牙的横向跨度约为 2×ARC_RADIUS。 */
-    private static final double ARC_RADIUS = 2.6D;
-    /**
-     * 月牙最厚处的厚度（格）。厚度沿弧线按 sin 分布 —— 中间最厚、两端收成刀尖，
-     * 这样才是「横扫的弧刃」而不是一条均匀的带子。
-     */
-    private static final double ARC_THICKNESS = 0.85D;
-    /** 每一段沿厚度方向填几颗粒子（外层白边 + 内层粉紫填充）。 */
+    /** 外弧基准半径（格），实际半径 = 基准 × scale。 */
+    private static final double ARC_BASE_RADIUS = 2.4D;
+    /** 月牙最厚处相对外弧半径的比例（中间最厚、两端收成刀尖）。 */
+    private static final double ARC_THICKNESS_RATIO = 0.30D;
+    /** 每一段沿厚度方向填几颗粒子。 */
     private static final int ARC_FILL_PER_SEGMENT = 3;
+    /** 每几 tick 撒一次粒子。 */
+    private static final int ARC_EMIT_INTERVAL = 1;
+
+    // ===== 体积联动 =====
+    /** 体积缩放下限。 */
+    private static final double SCALE_MIN = 0.70D;
+    /** 体积缩放上限。 */
+    private static final double SCALE_MAX = 2.60D;
+    /** 每消耗 100 点真气带来的额外缩放。 */
+    private static final double SCALE_PER_100_QI = 0.55D;
+
+    // ===== 沿途破坏 =====
+    /** 每几 tick 尝试破坏一次沿途方块，避免逐 tick 破坏造成卡顿。 */
+    private static final int TERRAIN_BREAK_INTERVAL = 2;
     /**
-     * 每隔多少 tick 撒一次粒子。1 = 每 tick 都撒（最密）；
-     * 卡顿时优先把这个值调大，粒子开销线性下降。
+     * 剑气破坏地形的真气折算系数。
+     * 比「真气强化冲刺」的破坏弱一些，否则一路飞过会把地表整片推平。
      */
-    private static final int ARC_EMIT_INTERVAL = 2;
+    private static final double TERRAIN_QI_FACTOR = 0.30D;
 
     private float damage = 1.0F;
     private double maxRange = 12.0D;
     private double traveled = 0.0D;
+    /** 发射时消耗的真气总量：同时决定月牙大小与破坏力。 */
+    private double qiSpent = 0.0D;
+    /** 由 {@link #qiSpent} 推出的体积缩放。 */
+    private double scale = 1.0D;
     /** 已被本发剑气打过的实体，避免同一目标被重复扣血。 */
     private final Set<UUID> hitEntities = new HashSet<>();
 
@@ -60,24 +79,32 @@ public class SwordQiProjectile extends Projectile {
         super(type, level);
     }
 
-    /** 由玩家发射：给定方向、伤害与最大射程。 */
-    public SwordQiProjectile(Level level, LivingEntity owner, Vec3 direction, float damage, double maxRange) {
+    /**
+     * 由玩家发射。
+     *
+     * @param qiSpent 本次发射消耗的真气总量（决定体积与破坏力）
+     */
+    public SwordQiProjectile(Level level, LivingEntity owner, Vec3 direction, float damage,
+                             double maxRange, double qiSpent) {
         this(ModEntities.SWORD_QI.get(), level);
         this.setOwner(owner);
         this.damage = damage;
         this.maxRange = maxRange;
+        this.qiSpent = qiSpent;
+        // 消耗真气越多 → 月牙越大（体积联动）
+        this.scale = Math.max(SCALE_MIN,
+                Math.min(SCALE_MAX, 1.0D + qiSpent / 100.0D * SCALE_PER_100_QI));
 
         Vec3 dir = direction.normalize();
         this.setPos(owner.getX(), owner.getEyeY() - 0.25D, owner.getZ());
         this.setDeltaMovement(dir.scale(SPEED));
-        // 让弧面朝向与飞行方向一致
         this.setYRot((float) Math.toDegrees(Math.atan2(dir.x, dir.z)));
         this.setXRot((float) Math.toDegrees(-Math.asin(dir.y)));
     }
 
     @Override
     protected void defineSynchedData(SynchedEntityData.Builder builder) {
-        // 无需同步字段：伤害/射程只在服务端推进，客户端只看飞行轨迹
+        // 无需同步字段：伤害/射程/体积只在服务端推进，客户端只看飞行轨迹与粒子
     }
 
     @Override
@@ -91,7 +118,16 @@ public class SwordQiProjectile extends Projectile {
         this.traveled += motion.length();
 
         if (!this.level().isClientSide()) {
-            AABB sweep = this.getBoundingBox().inflate(HIT_INFLATE);
+            // 沿途破坏方块（穿透不代表无害）
+            if (this.level() instanceof ServerLevel serverLevel
+                    && this.tickCount % TERRAIN_BREAK_INTERVAL == 0) {
+                Player owner = this.getOwner() instanceof Player p ? p : null;
+                CultivationHelper.breakTerrainAround(serverLevel, this.position(),
+                        this.qiSpent * TERRAIN_QI_FACTOR, owner);
+            }
+
+            // 命中判定：弧面扫到谁就伤害谁，同一目标只扣一次
+            AABB sweep = this.getBoundingBox().inflate(HIT_INFLATE * this.scale);
             for (Entity candidate : this.level().getEntities(this, sweep)) {
                 if (candidate == this.getOwner() || !(candidate instanceof LivingEntity living)) {
                     continue;
@@ -100,11 +136,11 @@ public class SwordQiProjectile extends Projectile {
                     living.hurt(this.damageSources().magic(), this.damage);
                 }
             }
-        }
-
-        // 外观：由原版粒子构成的拱形光弧。只在客户端生成（服务端撒粒子没有意义，还浪费带宽）。
-        if (this.level().isClientSide() && this.tickCount % ARC_EMIT_INTERVAL == 0) {
-            emitArcParticles();
+        } else {
+            // 外观：原版粒子构成的贴地平扫月牙
+            if (this.tickCount % ARC_EMIT_INTERVAL == 0) {
+                emitArcParticles();
+            }
         }
 
         // 飞满射程即消散
@@ -114,17 +150,15 @@ public class SwordQiProjectile extends Projectile {
     }
 
     /**
-     * 沿「拱形弧」铺一圈原版粒子，构成剑气外观（对应参考图：白色十字粒子勾弧 + 粉紫光晕）。
+     * 沿「贴地平扫的弯月」铺粒子。
      *
-     * <p>做法：用飞行方向算出三个正交基向量（前 / 右 / 上），再在「右-上」平面内
-     * 按 0~π 采样半圆 —— 中间最高、两端最低，即一道拱形弧。把每个采样点换算到世界坐标
-     * 后各撒两颗粒子：
-     * <ul>
-     *   <li>{@link ParticleTypes#FIREWORK} —— 白色十字闪光，负责勾出弧线轮廓；</li>
-     *   <li>{@link ParticleTypes#DRAGON_BREATH} —— 粉紫色雾气，负责柔和的发光底色。</li>
-     * </ul>
+     * <p>三个正交基：飞行方向算出水平右向量 {@code right}，再把飞行方向压进水平面得到
+     * {@code flatForward} —— 弧就在这两个向量张成的<b>水平面</b>内展开，所以看起来是一道横劈
+     * 出去的弧刃，而不是一堵竖着的弧墙。
      *
-     * <p>两者都是原版粒子，不引入任何额外依赖或贴图。
+     * <p>厚度沿弧线按 {@code sin} 分布：中间最厚、两端收成刀尖。外缘一层用
+     * {@link ParticleTypes#FIREWORK}（白色十字）勾出锋利刃口，内层用
+     * {@link ParticleTypes#DRAGON_BREATH}（粉紫）填充光晕。
      */
     private void emitArcParticles() {
         Vec3 forward = this.getDeltaMovement();
@@ -133,9 +167,7 @@ public class SwordQiProjectile extends Projectile {
         }
         forward = forward.normalize();
 
-        // 以世界上方向为参照构造正交基；正上/正下飞行时退化，换一个参照向量
         Vec3 worldUp = new Vec3(0.0D, 1.0D, 0.0D);
-        // 水平右向量：由飞行方向与世界上方向叉乘得到
         Vec3 right = forward.cross(worldUp);
         if (right.lengthSqr() < 1.0E-6D) {
             // 垂直向上/下飞行时叉乘退化，随便给一个水平方向
@@ -143,35 +175,32 @@ public class SwordQiProjectile extends Projectile {
         } else {
             right = right.normalize();
         }
-        // 水平前向量：把飞行方向压进水平面 —— 「贴地平扫」的弧就在这个平面内展开，
-        // 所以从玩家视角看是一道横劈的月牙，而不是一堵竖着的弧墙。
         Vec3 flatForward = worldUp.cross(right).normalize();
         if (flatForward.dot(forward) < 0.0D) {
-            flatForward = flatForward.scale(-1.0D);   // 保证凸面朝前
+            flatForward = flatForward.scale(-1.0D);      // 保证凸面朝前
         }
 
+        double outerRadius = ARC_BASE_RADIUS * this.scale;
+        double maxThickness = outerRadius * ARC_THICKNESS_RATIO;
         Vec3 base = this.position();
+
         for (int i = 0; i <= ARC_SEGMENTS; i++) {
             double t = (double) i / ARC_SEGMENTS;
             double angle = Math.PI * t;                             // 0 → π
-            // 沿弧的厚度分布：中间最厚、两端收成刀尖 —— 这才是「弧刃」的轮廓
-            double thickness = ARC_THICKNESS * Math.sin(Math.PI * t);
+            double thickness = maxThickness * Math.sin(Math.PI * t);
             if (thickness < 1.0E-4D) {
-                continue;                                            // 刀尖处自然收束
+                continue;                                           // 刀尖处自然收束
             }
 
             for (int k = 0; k < ARC_FILL_PER_SEGMENT; k++) {
-                // 在「外缘 → 内缘」之间横向铺满，形成有厚度的实体月牙
                 double fill = (k + 0.5D) / ARC_FILL_PER_SEGMENT;
-                double radius = ARC_RADIUS - thickness * fill;
-                // 弧在水平面内展开：横向用 right，前凸方向用 flatForward
+                double radius = outerRadius - thickness * fill;
                 double offsetRight = -Math.cos(angle) * radius;
                 double offsetForward = Math.sin(angle) * radius;
                 Vec3 p = base
                         .add(right.scale(offsetRight))
                         .add(flatForward.scale(offsetForward));
 
-                // 靠外缘的一层用白色十字勾出锋利的刃口，内层用粉紫填充出光晕
                 boolean edge = fill < 0.34D;
                 this.level().addParticle(
                         edge ? ParticleTypes.FIREWORK : ParticleTypes.DRAGON_BREATH,
@@ -185,6 +214,8 @@ public class SwordQiProjectile extends Projectile {
         this.damage = tag.getFloat("Damage");
         this.maxRange = tag.getDouble("MaxRange");
         this.traveled = tag.getDouble("Traveled");
+        this.qiSpent = tag.getDouble("QiSpent");
+        this.scale = tag.getDouble("Scale");
     }
 
     @Override
@@ -192,6 +223,8 @@ public class SwordQiProjectile extends Projectile {
         tag.putFloat("Damage", this.damage);
         tag.putDouble("MaxRange", this.maxRange);
         tag.putDouble("Traveled", this.traveled);
+        tag.putDouble("QiSpent", this.qiSpent);
+        tag.putDouble("Scale", this.scale);
     }
 
     @Override

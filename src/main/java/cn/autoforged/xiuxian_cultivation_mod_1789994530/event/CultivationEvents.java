@@ -112,11 +112,11 @@ public class CultivationEvents {
                 if (outcome.consumedQi() >= CultivationHelper.QI_FX_MIN_CONSUME) {
                     CultivationHelper.spawnQiEnhanceFeedback(serverPlayer, event.getEntity(), outcome.consumedQi());
                 }
-                // [真气强化] 功法 buff：攻击按真气消耗量破坏地形
+                // [真气强化] 功法 buff：攻击按真气消耗量破坏地形（并额外放大破坏范围）
                 if (CultivationHelper.isQiEnhanceSkillActive(serverPlayer)
                         && serverPlayer.level() instanceof net.minecraft.server.level.ServerLevel serverLevel) {
                     CultivationHelper.breakTerrainAround(serverLevel, event.getEntity().position(),
-                            outcome.consumedQi(), serverPlayer);
+                            outcome.consumedQi() * CultivationHelper.QI_ENHANCE_TERRAIN_MULTIPLIER, serverPlayer);
                 }
                 CultivationHelper.sync(serverPlayer);
             }
