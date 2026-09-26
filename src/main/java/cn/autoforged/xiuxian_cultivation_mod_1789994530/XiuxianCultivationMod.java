@@ -5,6 +5,7 @@ import cn.autoforged.xiuxian_cultivation_mod_1789994530.config.ModCommonConfig;
 import cn.autoforged.xiuxian_cultivation_mod_1789994530.effect.ModEffects;
 import cn.autoforged.xiuxian_cultivation_mod_1789994530.entity.ModEntities;
 import cn.autoforged.xiuxian_cultivation_mod_1789994530.item.ModItems;
+import cn.autoforged.xiuxian_cultivation_mod_1789994530.particle.ModParticles;
 import cn.autoforged.xiuxian_cultivation_mod_1789994530.ui.ModTabs;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.ModContainer;
@@ -21,6 +22,7 @@ public class XiuxianCultivationMod {
         ModAttachments.ATTACHMENTS.register(modEventBus);
         ModEffects.EFFECTS.register(modEventBus);
         ModTabs.CREATIVE_TABS.register(modEventBus);
+        ModParticles.PARTICLES.register(modEventBus);
         modContainer.registerConfig(ModConfig.Type.COMMON, ModCommonConfig.CONFIG_SPEC);
     }
 }

@@ -3,6 +3,7 @@ package cn.autoforged.xiuxian_cultivation_mod_1789994530.event;
 import cn.autoforged.xiuxian_cultivation_mod_1789994530.XiuxianCultivationMod;
 import cn.autoforged.xiuxian_cultivation_mod_1789994530.attachment.CultivationData;
 import cn.autoforged.xiuxian_cultivation_mod_1789994530.attachment.ModAttachments;
+import cn.autoforged.xiuxian_cultivation_mod_1789994530.config.ModCommonConfig;
 import cn.autoforged.xiuxian_cultivation_mod_1789994530.cultivation.CultivationHelper;
 import cn.autoforged.xiuxian_cultivation_mod_1789994530.cultivation.MobQiHelper;
 import net.minecraft.server.level.ServerPlayer;
@@ -113,7 +114,9 @@ public class CultivationEvents {
                     CultivationHelper.spawnQiEnhanceFeedback(serverPlayer, event.getEntity(), outcome.consumedQi());
                 }
                 // [真气强化] 功法 buff：攻击按真气消耗量破坏地形（并额外放大破坏范围）
+                // 是否开启破坏、半径换算比例均由配置文件控制
                 if (CultivationHelper.isQiEnhanceSkillActive(serverPlayer)
+                        && ModCommonConfig.CONFIG.meleeBreakBlocks.get()
                         && serverPlayer.level() instanceof net.minecraft.server.level.ServerLevel serverLevel) {
                     CultivationHelper.breakTerrainAround(serverLevel, event.getEntity().position(),
                             outcome.consumedQi() * CultivationHelper.QI_ENHANCE_TERRAIN_MULTIPLIER, serverPlayer);

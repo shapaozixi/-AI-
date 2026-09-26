@@ -1,7 +1,8 @@
 package cn.autoforged.xiuxian_cultivation_mod_1789994530.entity;
 
+import cn.autoforged.xiuxian_cultivation_mod_1789994530.config.ModCommonConfig;
 import cn.autoforged.xiuxian_cultivation_mod_1789994530.cultivation.CultivationHelper;
-import net.minecraft.core.particles.ParticleTypes;
+import cn.autoforged.xiuxian_cultivation_mod_1789994530.particle.ModParticles;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.syncher.SynchedEntityData;
 import net.minecraft.server.level.ServerLevel;
@@ -41,8 +42,11 @@ public class SwordQiProjectile extends Projectile {
     private static final int ARC_SEGMENTS = 16;
     /** 外弧基准半径（格），实际半径 = 基准 × scale。 */
     private static final double ARC_BASE_RADIUS = 2.4D;
-    /** 月牙最厚处相对外弧半径的比例（中间最厚、两端收成刀尖）。 */
-    private static final double ARC_THICKNESS_RATIO = 0.30D;
+    /**
+     * 月牙最厚处相对外弧半径的比例（中间最厚、两端收成刀尖）。
+     * 0.45 比原先的 0.30 厚实得多，弧刃更有「肉」感。
+     */
+    private static final double ARC_THICKNESS_RATIO = 0.45D;
     /** 每一段沿厚度方向填几颗粒子。 */
     private static final int ARC_FILL_PER_SEGMENT = 3;
     /** 每几 tick 撒一次粒子。 */
@@ -59,12 +63,6 @@ public class SwordQiProjectile extends Projectile {
     // ===== 沿途破坏 =====
     /** 每几 tick 尝试破坏一次沿途方块，避免逐 tick 破坏造成卡顿。 */
     private static final int TERRAIN_BREAK_INTERVAL = 2;
-    /**
-     * 剑气破坏地形的真气折算系数。
-     * 比「真气强化冲刺」的破坏弱一些，否则一路飞过会把地表整片推平。
-     */
-    private static final double TERRAIN_QI_FACTOR = 0.30D;
-
     private float damage = 1.0F;
     private double maxRange = 12.0D;
     private double traveled = 0.0D;
@@ -118,12 +116,14 @@ public class SwordQiProjectile extends Projectile {
         this.traveled += motion.length();
 
         if (!this.level().isClientSide()) {
-            // 沿途破坏方块（穿透不代表无害）
-            if (this.level() instanceof ServerLevel serverLevel
+            // 沿途破坏方块（穿透不代表无害）—— 是否开启、强度多大都可在配置文件里改
+            if (ModCommonConfig.CONFIG.swordQiBreakBlocks.get()
+                    && this.level() instanceof ServerLevel serverLevel
                     && this.tickCount % TERRAIN_BREAK_INTERVAL == 0) {
                 Player owner = this.getOwner() instanceof Player p ? p : null;
+                double factor = ModCommonConfig.CONFIG.swordQiTerrainFactor.get();
                 CultivationHelper.breakTerrainAround(serverLevel, this.position(),
-                        this.qiSpent * TERRAIN_QI_FACTOR, owner);
+                        this.qiSpent * factor, owner);
             }
 
             // 命中判定：弧面扫到谁就伤害谁，同一目标只扣一次
@@ -156,9 +156,8 @@ public class SwordQiProjectile extends Projectile {
      * {@code flatForward} —— 弧就在这两个向量张成的<b>水平面</b>内展开，所以看起来是一道横劈
      * 出去的弧刃，而不是一堵竖着的弧墙。
      *
-     * <p>厚度沿弧线按 {@code sin} 分布：中间最厚、两端收成刀尖。外缘一层用
-     * {@link ParticleTypes#FIREWORK}（白色十字）勾出锋利刃口，内层用
-     * {@link ParticleTypes#DRAGON_BREATH}（粉紫）填充光晕。
+     * <p>厚度沿弧线按 {@code sin} 分布：中间最厚、两端收成刀尖。所有粒子统一使用自定义的
+     * {@link ModParticles#SWORD_QI}（蓝色、零重力、4 tick 寿命）。
      */
     private void emitArcParticles() {
         Vec3 forward = this.getDeltaMovement();
@@ -201,9 +200,9 @@ public class SwordQiProjectile extends Projectile {
                         .add(right.scale(offsetRight))
                         .add(flatForward.scale(offsetForward));
 
-                boolean edge = fill < 0.34D;
+                // 统一使用自定义蓝色粒子：零重力（不下坠）+ 4 tick 寿命（拖尾不拉长）
                 this.level().addParticle(
-                        edge ? ParticleTypes.FIREWORK : ParticleTypes.DRAGON_BREATH,
+                        ModParticles.SWORD_QI.get(),
                         p.x, p.y, p.z, 0.0D, 0.0D, 0.0D);
             }
         }

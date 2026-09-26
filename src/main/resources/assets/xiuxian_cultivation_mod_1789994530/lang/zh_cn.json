@@ -56,5 +56,11 @@
   "xiuxian_cultivation_mod_1789994530.message.lock_none": "视线内没有可锁定的生物。",
   "xiuxian_cultivation_mod_1789994530.message.lock_off": "已解除锁定。",
   "config.xiuxian_cultivation_mod_1789994530.lock_max_distance": "锁定最大距离（格）",
-  "config.xiuxian_cultivation_mod_1789994530.entity_qi_bar": "显示生物真气数值条"
+  "config.xiuxian_cultivation_mod_1789994530.entity_qi_bar": "显示生物真气数值条",
+  "config.xiuxian_cultivation_mod_1789994530.sword_qi_break_blocks": "剑气破坏方块",
+  "config.xiuxian_cultivation_mod_1789994530.melee_break_blocks": "近战攻击破坏方块（真气强化期间）",
+  "config.xiuxian_cultivation_mod_1789994530.terrain_qi_per_radius": "破坏半径换算：每多少真气 +1 格（越小破坏越猛）",
+  "config.xiuxian_cultivation_mod_1789994530.terrain_max_radius": "破坏半径上限（格）",
+  "config.xiuxian_cultivation_mod_1789994530.terrain_max_blocks": "单次破坏方块数上限（卡顿就调小）",
+  "config.xiuxian_cultivation_mod_1789994530.sword_qi_terrain_factor": "剑气破坏强度系数（越小剑气破坏越弱）"
 }

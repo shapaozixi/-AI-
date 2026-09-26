@@ -1060,11 +1060,12 @@ public final class CultivationHelper {
             return;
         }
         int radius = terrainRadius(qiConsumed);
+        int maxBlocks = ModCommonConfig.CONFIG.terrainMaxBlocks.get();
         BlockPos origin = BlockPos.containing(center);
         int broken = 0;
         for (BlockPos pos : BlockPos.betweenClosed(
                 origin.offset(-radius, -radius, -radius), origin.offset(radius, radius, radius))) {
-            if (broken >= TERRAIN_MAX_BLOCKS) {
+            if (broken >= maxBlocks) {
                 break;
             }
             if (tryBreakBlock(level, pos.immutable(), player)) {
@@ -1101,9 +1102,11 @@ public final class CultivationHelper {
         }
     }
 
+    /** 破坏半径 = 基准半径 + 消耗真气 ÷ 每点半径所需真气（比例可在配置文件里调）。 */
     private static int terrainRadius(double qiConsumed) {
-        return (int) Math.min(TERRAIN_MAX_RADIUS,
-                TERRAIN_BASE_RADIUS + qiConsumed / TERRAIN_QI_PER_RADIUS);
+        double perRadius = Math.max(1.0D, ModCommonConfig.CONFIG.terrainQiPerRadius.get());
+        int maxRadius = ModCommonConfig.CONFIG.terrainMaxRadius.get();
+        return (int) Math.min(maxRadius, TERRAIN_BASE_RADIUS + qiConsumed / perRadius);
     }
 
     private static boolean tryBreakBlock(ServerLevel level, BlockPos pos, Player player) {
